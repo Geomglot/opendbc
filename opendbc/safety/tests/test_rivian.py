@@ -18,6 +18,8 @@ def checksum(msg):
     ret[0] = _checksum(ret[1:], 0x1D, 0xB1)
   elif addr == 0x150:
     ret[0] = _checksum(ret[1:], 0x1D, 0x9A)
+  elif addr == 0x162:
+    ret[0] = _checksum(ret[1:], 0x1D, 0xD1)
 
   return addr, ret, bus
 
@@ -41,6 +43,7 @@ class TestRivianSafetyBase(common.CarSafetyTest, common.DriverTorqueSteeringSafe
 
   cnt_speed = 0
   cnt_speed_2 = 0
+  cnt_adas = 0
 
   def _torque_driver_msg(self, torque):
     values = {"EPAS_TorsionBarTorque": torque / 100.0}
@@ -73,6 +76,11 @@ class TestRivianSafetyBase(common.CarSafetyTest, common.DriverTorqueSteeringSafe
   def _pcm_status_msg(self, enable):
     values = {"ACM_FeatureStatus": enable, "ACM_Unkown1": 1}
     return self.packer.make_can_msg_safety("ACM_Status", 2, values)
+
+  def _adas_status_msg(self, user_request):
+    values = {"VDM_UserAdasRequest": user_request, "VDM_AdasStatus_Counter": self.cnt_adas % 15}
+    self.__class__.cnt_adas += 1
+    return self.packer.make_can_msg_safety("VDM_AdasSts", 0, values, fix_checksum=checksum)
 
   def _accel_msg(self, accel: float):
     values = {"ACM_AccelerationRequest": accel}
@@ -108,6 +116,16 @@ class TestRivianSafetyBase(common.CarSafetyTest, common.DriverTorqueSteeringSafe
         msg[0].data[0] = 0xff
         self.assertFalse(self._rx(msg))
         self.assertFalse(self.safety.get_controls_allowed())
+
+    self.safety.set_controls_allowed(True)
+    for _ in range(10):
+      msg = self._adas_status_msg(1)
+      self.assertTrue(self._rx(msg))
+      self.assertTrue(self.safety.get_controls_allowed())
+
+    msg[0].data[0] = 0xff
+    self.assertFalse(self._rx(msg))
+    self.assertFalse(self.safety.get_controls_allowed())
 
 
 class TestRivianStockSafety(TestRivianSafetyBase):
