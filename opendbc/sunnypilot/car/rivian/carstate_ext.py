@@ -32,7 +32,6 @@ class CarStateExt:
     self.distance_button = 0
     self.increase_counter = 0
     self.decrease_counter = 0
-    self.stalk_down_counter = 0
     self.vdm_user_adas_request = 0
     self._lkas_pending = False
     self.steering_mode_on_brake = read_steering_mode_param(CP, CP_SP, Params())
@@ -116,11 +115,8 @@ class CarStateExt:
 
       # VDM_UserAdasRequest: 0=IDLE, 1=UP_1, 2=UP_2, 3=DOWN_1, 4=DOWN_2
       stalk_down = int(cp.vl["VDM_AdasSts"]["VDM_UserAdasRequest"]) in (3, 4)
-      self.stalk_down_counter = self.stalk_down_counter + 1 if stalk_down else 0
-
-      if self.stalk_down_counter == 1:
-        # Mimic Rivian ACC: holding stalk sets speed to current speed (never decreases)
-        self.set_speed = max(self.set_speed, ret.vEgoCluster)
+      # Mimic Rivian ACC: holding stalk sets speed to current speed (never decreases)
+      self.set_speed = max(self.set_speed, ret.vEgoCluster)
 
       self.set_speed = max(MIN_SET_SPEED, min(self.set_speed, MAX_SET_SPEED))
       ret.cruiseState.speed = self.set_speed
