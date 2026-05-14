@@ -24,7 +24,7 @@ class MadsCarController:
 
   def mads_status_update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS: CarStateBase) -> MadsDataSP:
     if CC_SP.mads.available:
-      self.lka_icon_states = self.lat_active
+      self.lka_icon_states = CC.latActive
       self.lat_active = CC.latActive and abs(CS.out.steeringAngleDeg) < MAX_STEERING_ANGLE
     else:
       self.lka_icon_states = CC.enabled
