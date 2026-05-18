@@ -39,6 +39,7 @@ class CarStateExt:
     self._prev_cruise_enabled: bool = False
     self._resume_eligible: bool = False
     self._resume_acc_counter: int = 0
+    self._resume_locked: bool = False
     self._prev_stalk_down2: bool = False
     self._prev_stalk_down: bool = False
     self._frames_since_acc_on: int = 0
@@ -120,6 +121,8 @@ class CarStateExt:
       vdm_request = int(cp.vl["VDM_AdasSts"]["VDM_UserAdasRequest"])
       stalk_down2 = vdm_request == 4
       stalk_down = vdm_request in (3, 4)
+      # Compute falling edge before _prev_stalk_down2 is updated this frame.
+      stalk_down2_falling = self._prev_stalk_down2 and not stalk_down2
 
       # Save the last active set speed when ACC turns off.
       if self._prev_cruise_enabled and not ret.cruiseState.enabled:
@@ -146,8 +149,11 @@ class CarStateExt:
 
       # Match the current DOWN behavior: a stalk-down request can immediately
       # snap the set speed up to current vehicle speed, but never lower a
-      # higher requested set speed.
-      if stalk_down:
+      # higher requested set speed. Suppress the snap after a resume fires so
+      # the restored set speed is not immediately overwritten by the held stalk.
+      if not stalk_down:
+        self._resume_locked = False
+      if stalk_down and not self._resume_locked:
         self.set_speed = max(self.set_speed, ret.vEgoCluster)
 
       self._prev_cruise_enabled = ret.cruiseState.enabled
@@ -160,11 +166,19 @@ class CarStateExt:
         self._resume_acc_counter += 1
       else:
         if self._resume_eligible and not stalk_down2:
+          # DOWN_2 released while armed: fire resume on the falling edge instead
+          # of discarding. From MADS, ACC engages immediately on DOWN_1 so the
+          # user naturally releases before the 0.5s hold counter completes.
+          if stalk_down2_falling and ret.cruiseState.enabled and self.last_active_set_speed is not None:
+            self.set_speed = self.last_active_set_speed
+            self._resume_locked = True
           self._resume_eligible = False
         self._resume_acc_counter = 0
 
+      # Also fire on a deliberate 0.5s hold (covers non-MADS / stop-resume cases).
       if self._resume_acc_counter == 50 and self.last_active_set_speed is not None:
         self.set_speed = self.last_active_set_speed
+        self._resume_locked = True
         self._resume_eligible = False
         self._resume_acc_counter = 0
 
